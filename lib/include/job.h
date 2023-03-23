@@ -5,7 +5,6 @@
 #include "common.h"
 #include <unistd.h>
 
-#define MAXLINE 1024   /* max line size */
 #define MAXJOBS 16     /* max jobs at any time point */
 #define MAXJID 1 << 16 /* max job id */
 

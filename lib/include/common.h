@@ -9,6 +9,8 @@
 #define FAILURE 0
 #define bool uint8_t
 
+#define MAXLINE 1024   /* max line size */
+
 extern char **environ;
 int verbose = 0;
 

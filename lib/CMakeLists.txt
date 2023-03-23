@@ -12,7 +12,14 @@ add_library(
 )
 target_include_directories(job PUBLIC "${LIB_INCLUDE_DIR}")
 
-# common libraries
+add_library(
+  common SHARED
+  include/common.h
+  src/common.c
+)
+target_include_directories(common PUBLIC "${LIB_INCLUDE_DIR}")
+
+# external libraries
 add_library(
   csapp SHARED
   include/csapp.h
@@ -20,14 +27,14 @@ add_library(
 )
 target_include_directories(csapp PUBLIC "${LIB_INCLUDE_DIR}")
 
-# aggregate all auxiliary libraries into libcomm 
+# aggregate all auxiliary(external) libraries into libcomm 
 # todo: add library to import in libcomm
 add_library(
-  libcomm INTERFACE
+  libexternal INTERFACE
 )
 
 target_link_libraries(
-  libcomm INTERFACE
+  libexternal INTERFACE
   csapp
 )
-target_include_directories(libcomm INTERFACE "${LIB_INCLUDE_DIR}")
+target_include_directories(libexternal INTERFACE "${LIB_INCLUDE_DIR}")
