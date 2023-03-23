@@ -1,3 +1,3 @@
-# TEST FRAMEWORK
+# Mini Shell 
 
-This is a test framework for test-driven project built on Google Test.
+This is a mini shell with job controlling.
