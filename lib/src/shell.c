@@ -4,6 +4,8 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 static int argc;
 static char *argv[MAXARGS];
@@ -24,7 +26,39 @@ void sigquit_handler(int sig) {
   exit(1);
 }
 
-void sigchld_handler(int sig) {}
+// synchronize with addjob by blocking signal masks
+void sigchld_handler(int sig) {
+  if (verbose) {
+    printf("sigchld_handler: entering\n");
+  }
+
+  int olderrno = errno;
+  pid_t pid;
+  int status;
+  while ((pid = waitpid(-1, &status, 0)) > 0) {
+    int jid = PID2JID(jobs, pid);
+    if (verbose) {
+      printf("sigchld_handler: Job [%d] (%d) deleted\n", jid, pid);
+    }
+    // reap a zombie child
+    deletejob(jobs, pid);
+
+    if (verbose) {
+      if (WIFEXITED(status)) {
+        printf("sigchld_handler: Job [%d] (%d) terminates OK (status %d)\n",
+               jid, pid, WEXITSTATUS(status));
+      } else {
+        printf("sigchld_handler: Job [%d] (%d) terminates abnormally\n", jid,
+               pid);
+      }
+    }
+  }
+
+  errno = olderrno;
+  if (verbose) {
+    printf("sigchld_handler: exiting\n");
+  }
+}
 void sigtstp_handler(int sig) {}
 void sigint_handler(int sig) {}
 
@@ -35,24 +69,59 @@ void eval(char *cmdline) {
   }
 
   int is_bg = parseline(cmdline, argv);
-  if (argv[0] == NULL) {
+  if (argv[0] == NULL || strcmp(argv[0], "") == 0) {
     // empty line
     return;
   }
 
   int is_builtin;
+  // if it is a builtin command
   if ((is_builtin = builtin_cmd(argv)) == 1)
     return;
 
-  // if it is not a builtin
-  if (is_bg) {
-    // if it is a background request
-  } else {
+  // if not, synchronize add and delete jobs
+  pid_t pid;
+  sigset_t mask_all, mask_one, prev_one;
+  sigfillset(&mask_all);
+  sigemptyset(&mask_one);
+  sigaddset(&mask_one, SIGCHLD);
+
+  // to make sure sigchld_handler triggered after job is added
+  // block SIGCHLD for parent process and child process
+  sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+
+  // child process
+  if ((pid = fork()) == 0) {
+    sigprocmask(SIG_SETMASK, &prev_one, NULL);
+    if (execve(argv[0], argv, environ) < 0) {
+      fprintf(stderr, "%s: Command not found\n", argv[0]);
+      exit(0);
+    }
+  }
+
+  // shell process
+  // more strict block mask than mask_one
+  sigprocmask(SIG_BLOCK, &mask_all, NULL);
+  int p_state = is_bg ? BG : FG;
+  addjob(jobs, pid, p_state, argv[0]);
+  sigprocmask(SIG_SETMASK, &prev_one, NULL);
+
+  if (!is_bg) {
     // not a backgroup request
+    waitfg(pid);
   }
 }
 
-extern struct job_t *jobs;
+void waitfg(pid_t pid) {
+  sigset_t mask_empty;
+  sigemptyset(&mask_empty);
+
+  sigsuspend(&mask_empty);
+
+  if (verbose) {
+    printf("waitfg: Process (%d) no longer the foreground process\n", pid);
+  }
+}
 
 // return 1 and execute builtin command immediately, and 0 otherwise
 int builtin_cmd(char *argv[]) {
@@ -73,7 +142,6 @@ int builtin_cmd(char *argv[]) {
 }
 
 void do_bgfg(char *argv[]) {}
-void waitfg(pid_t pid) {}
 
 /* Helper Functions */
 
@@ -92,9 +160,9 @@ int parseline(const char *cmdline, char *argv[]) {
   // determine delimeter
   if (*p == '\'') {
     p++;
-    delim = strchr(buf, '\'');
+    delim = strchr(p, '\'');
   } else {
-    delim = strchr(buf, ' ');
+    delim = strchr(p, ' ');
   }
 
   // two pointers
@@ -111,9 +179,9 @@ int parseline(const char *cmdline, char *argv[]) {
     // determine delimeter
     if (*p == '\'') {
       p++;
-      delim = strchr(buf, '\'');
+      delim = strchr(p, '\'');
     } else {
-      delim = strchr(buf, ' ');
+      delim = strchr(p, ' ');
     }
   };
 

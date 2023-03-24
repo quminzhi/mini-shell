@@ -6,7 +6,6 @@
 #include <stdio.h>
 
 char prompt[] = "mini> ";
-struct job_t jobs[MAXJOBS];
 
 int main(int argc, char *argv[]) {
   int emit_prompt = 1; /* emit prompt (default) */

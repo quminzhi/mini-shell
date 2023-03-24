@@ -3,10 +3,12 @@
 #define SHELL_H_
 
 #include "common.h"
+#include "job.h"
 
 #define MAXARGS 128
 
 extern char **environ;
+struct job_t jobs[MAXJOBS];
 
 typedef void (*handler_t)(int);
 handler_t Signal(int signum, handler_t handler);

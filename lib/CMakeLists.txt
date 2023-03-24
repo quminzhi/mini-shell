@@ -24,6 +24,7 @@ target_include_directories(common PUBLIC "${LIB_INCLUDE_DIR}")
 add_library(
   shell SHARED
   include/shell.h
+  include/common.h
   include/job.h
   src/shell.c
 )

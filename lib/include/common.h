@@ -4,6 +4,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <unistd.h>
 
 #define SUCCESS 1
 #define FAILURE 0
@@ -13,6 +14,6 @@
 
 #define MAXLINE 1024   /* max line size */
 
-int verbose = 1;
+int verbose = 0;
 
 #endif  // COMMON_H_
