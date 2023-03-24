@@ -16,3 +16,6 @@ add_subdirectory(lib)
 
 # executable is defined in test directory
 add_subdirectory(test)
+
+# add final executable
+add_subdirectory(app)
