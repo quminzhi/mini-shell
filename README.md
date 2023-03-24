@@ -102,11 +102,14 @@ The shell is basically an infinite while loop, terminated only when received a
 termination signal (SIGINT or SIGKILL) or by `quit` built-in command.
 
 ```c
+// pseudo code for main function
 int main(int argc, char *argv[]) {
+  init_jobs();
+  install_signal_handlers();
+
   while (true) {
     read_command();
-    parse_arguments();
-    resolve_command();
+    eval_command();
   }
 
   return 0;

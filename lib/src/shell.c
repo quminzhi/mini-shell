@@ -1,8 +1,12 @@
 #include "shell.h"
+#include "job.h"
 #include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+
+static int argc;
+static char *argv[MAXARGS];
 
 // Wrapper for the sigaction function
 handler_t Signal(int signum, handler_t handler) {
@@ -20,18 +24,60 @@ void sigquit_handler(int sig) {
   exit(1);
 }
 
-void sigchld_handler(int sig);
-void sigtstp_handler(int sig);
-void sigint_handler(int sig);
+void sigchld_handler(int sig) {}
+void sigtstp_handler(int sig) {}
+void sigint_handler(int sig) {}
 
-void eval(char *cmdline);
-int builtin_cmd(char *argv[]);
-void do_bgfg(char *argv[]);
-void waitfg(pid_t pid);
+void eval(char *cmdline) {
+  // initialize argv
+  for (int i = 0; i < MAXARGS; i++) {
+    argv[i] = NULL;
+  }
+
+  int is_bg = parseline(cmdline, argv);
+  if (argv[0] == NULL) {
+    // empty line
+    return;
+  }
+
+  int is_builtin;
+  if ((is_builtin = builtin_cmd(argv)) == 1)
+    return;
+
+  // if it is not a builtin
+  if (is_bg) {
+    // if it is a background request
+  } else {
+    // not a backgroup request
+  }
+}
+
+extern struct job_t *jobs;
+
+// return 1 and execute builtin command immediately, and 0 otherwise
+int builtin_cmd(char *argv[]) {
+  // resolve builtin command if it is valid
+  if (strcmp(*argv, "quit") == 0 && argc == 1) {
+    exit(0);
+    return 1;
+  } else if (strcmp(*argv, "jobs") == 0 && argc == 1) {
+    listjobs(jobs);
+    return 1;
+  } else if ((strcmp(*argv, "fg") == 0 && argc == 2) ||
+             (strcmp(*argv, "bg") == 0 && argc == 2)) {
+    do_bgfg(argv);
+    return 1;
+  }
+
+  return 0;
+}
+
+void do_bgfg(char *argv[]) {}
+void waitfg(pid_t pid) {}
 
 /* Helper Functions */
 
-int parseLine(const char *cmdline, char *argv[]) {
+int parseline(const char *cmdline, char *argv[]) {
   static char buf[MAXLINE]; /* cache cmdline */
   char *p = buf;            /* pointer that traverse the buffer */
   int bg = 0;               /* 1 if it is a background command, 0 otherwise */
@@ -41,25 +87,35 @@ int parseLine(const char *cmdline, char *argv[]) {
   buf[strlen(buf) - 1] = ' ';
 
   // parse argument: treat '...' as a single argument
-  int argc = 0;
+  argc = 0;
   char *delim;
+  // determine delimeter
+  if (*p == '\'') {
+    p++;
+    delim = strchr(buf, '\'');
+  } else {
+    delim = strchr(buf, ' ');
+  }
+
   // two pointers
-  do {
+  while (delim) {
+    argv[argc++] = p;
+    // replace delimeter with null terminated sign '\0'
+    *delim = '\0';
+    p = delim + 1;
+
     // skip leading spaces and find delimeter of ith argument
     while (p && *p == ' ')
       p++;
+
+    // determine delimeter
     if (*p == '\'') {
       p++;
       delim = strchr(buf, '\'');
     } else {
       delim = strchr(buf, ' ');
     }
-
-    argv[argc++] = p;
-    // replace delimeter with null terminated sign '\0'
-    *delim = '\0';
-    p = delim + 1;
-  } while (delim);
+  };
 
   // appending a null to the end of the argument list
   argv[argc] = NULL;

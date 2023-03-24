@@ -4,6 +4,8 @@
 
 #include "common.h"
 
+#define MAXARGS 128
+
 extern char **environ;
 
 typedef void (*handler_t)(int);
@@ -22,7 +24,7 @@ void waitfg(pid_t pid);
 /* helper functions */
 
 // return 1 if a bg job is requested, 0 otherwise
-int parseLine(const char *cmdline, char *argv[]);
+int parseline(const char *cmdline, char *argv[]);
 void usage(void);
 void unix_error(char *msg);
 void app_error(char *msg);

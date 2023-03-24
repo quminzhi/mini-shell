@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.18.4)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 set(LIB_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include")
 
 # add your own library here
@@ -22,6 +24,7 @@ target_include_directories(common PUBLIC "${LIB_INCLUDE_DIR}")
 add_library(
   shell SHARED
   include/shell.h
+  include/job.h
   src/shell.c
 )
 target_include_directories(shell PUBLIC "${LIB_INCLUDE_DIR}")

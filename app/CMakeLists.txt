@@ -4,10 +4,13 @@ set(APP myapp)
 set(SOURCES ${APP}.c)
 set(HEADERS ${APP}.h)
 
+set(CMAKE_BUILD_TYPE Debug)
+
 add_executable(${APP} ${SOURCES} ${HEADERS})
 target_link_libraries(${APP} PUBLIC
   # link libraries needed
   job
+  shell
 ) 
 
 
