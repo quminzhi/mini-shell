@@ -7,7 +7,7 @@ set(HEADERS ${APP}.h)
 add_executable(${APP} ${SOURCES} ${HEADERS})
 target_link_libraries(${APP} PUBLIC
   # link libraries needed
-
+  job
 ) 
 
 

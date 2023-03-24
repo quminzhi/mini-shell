@@ -4,6 +4,8 @@
 
 #include "common.h"
 
+extern char **environ;
+
 typedef void (*handler_t)(int);
 handler_t Signal(int signum, handler_t handler);
 
@@ -16,5 +18,13 @@ void eval(char *cmdline);
 int builtin_cmd(char *argv[]);
 void do_bgfg(char *argv[]);
 void waitfg(pid_t pid);
+
+/* helper functions */
+
+// return 1 if a bg job is requested, 0 otherwise
+int parseLine(const char *cmdline, char *argv[]);
+void usage(void);
+void unix_error(char *msg);
+void app_error(char *msg);
 
 #endif

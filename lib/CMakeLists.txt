@@ -19,6 +19,13 @@ add_library(
 )
 target_include_directories(common PUBLIC "${LIB_INCLUDE_DIR}")
 
+add_library(
+  shell SHARED
+  include/shell.h
+  src/shell.c
+)
+target_include_directories(shell PUBLIC "${LIB_INCLUDE_DIR}")
+
 # external libraries
 add_library(
   csapp SHARED

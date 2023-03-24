@@ -8,15 +8,11 @@
 #define SUCCESS 1
 #define FAILURE 0
 #define bool uint8_t
+#define true 1
+#define false 0
 
 #define MAXLINE 1024   /* max line size */
 
-extern char **environ;
-int verbose = 0;
-
-int parseLine(const char *cmdline, char *argv[]);
-void usage(void);
-void unix_error(char *msg);
-void app_error(char *msg);
+int verbose = 1;
 
 #endif  // COMMON_H_
