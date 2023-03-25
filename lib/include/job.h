@@ -29,7 +29,7 @@ int deletejob(struct job_t *jobs, pid_t pid);
 void clearjob(struct job_t *jobs);
 
 // return pid of currrent foreground job, 0 if no foreground job
-pid_t fgPID(struct job_t *jobs, pid_t pid);
+pid_t fgPID(struct job_t *jobs);
 // return null on failure
 struct job_t *getjobPID(struct job_t *jobs, pid_t pid);
 // return null on failure

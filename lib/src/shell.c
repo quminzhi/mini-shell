@@ -40,6 +40,7 @@ void sigchld_handler(int sig) {
     if (verbose) {
       printf("sigchld_handler: Job [%d] (%d) deleted\n", jid, pid);
     }
+
     // reap a zombie child
     deletejob(jobs, pid);
 
@@ -81,30 +82,31 @@ void eval(char *cmdline) {
 
   // if not, synchronize add and delete jobs
   pid_t pid;
-  sigset_t mask_all, mask_one, prev_one;
+  sigset_t mask_all, mask_one, prev;
   sigfillset(&mask_all);
   sigemptyset(&mask_one);
   sigaddset(&mask_one, SIGCHLD);
 
   // to make sure sigchld_handler triggered after job is added
   // block SIGCHLD for parent process and child process
-  sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
+  sigprocmask(SIG_BLOCK, &mask_one, &prev);
 
-  // child process
+  /* child process */
   if ((pid = fork()) == 0) {
-    sigprocmask(SIG_SETMASK, &prev_one, NULL);
+    sigprocmask(SIG_SETMASK, &prev, NULL);
     if (execve(argv[0], argv, environ) < 0) {
       fprintf(stderr, "%s: Command not found\n", argv[0]);
       exit(0);
     }
   }
 
-  // shell process
-  // more strict block mask than mask_one
-  sigprocmask(SIG_BLOCK, &mask_all, NULL);
+  /* shell process */
   int p_state = is_bg ? BG : FG;
+  // prevent any signal from interrupting the addjob routine
+  sigprocmask(SIG_BLOCK, &mask_all, NULL);
   addjob(jobs, pid, p_state, argv[0]);
-  sigprocmask(SIG_SETMASK, &prev_one, NULL);
+  // restore original mask state
+  sigprocmask(SIG_SETMASK, &prev, NULL);
 
   if (!is_bg) {
     // not a backgroup request
@@ -113,14 +115,21 @@ void eval(char *cmdline) {
 }
 
 void waitfg(pid_t pid) {
-  sigset_t mask_empty;
-  sigemptyset(&mask_empty);
+  sigset_t mask_chld, prev;
+  sigemptyset(&mask_chld);
+  sigaddset(&mask_chld, SIGCHLD);
 
-  sigsuspend(&mask_empty);
+  sigprocmask(SIG_BLOCK, &mask_chld, &prev);
+  while (fgPID(jobs)) {
+    sigsuspend(&prev);
+  }
 
   if (verbose) {
     printf("waitfg: Process (%d) no longer the foreground process\n", pid);
   }
+
+  // restore mask
+  sigprocmask(SIG_SETMASK, &prev, NULL);
 }
 
 // return 1 and execute builtin command immediately, and 0 otherwise

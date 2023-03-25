@@ -77,7 +77,7 @@ int deletejob(struct job_t *jobs, pid_t pid) {
   return FAILURE;
 }
 
-pid_t fgPID(struct job_t *jobs, pid_t pid) {
+pid_t fgPID(struct job_t *jobs) {
   for (int i = 0; i < MAXJOBS; i++) {
     if (jobs[i].state == FG) {
       return jobs[i].pid;
