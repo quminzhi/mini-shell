@@ -35,14 +35,28 @@ void sigchld_handler(int sig) {
   int olderrno = errno;
   pid_t pid;
   int status;
-  while ((pid = waitpid(-1, &status, 0)) > 0) {
+  sigset_t mask_all, prev_all;
+
+  sigfillset(&mask_all);
+  
+  // WUNTRACED: return when a child process is stopped, like a foreground
+  // process is stopped by SIGTSTP (ctrl-z)
+  // WNOHANG: return when no zombie (terminated) process exist, allowing shell
+  // main process to do some other stuff instead of waiting unterminated
+  // processes.
+  while ((pid = waitpid(-1, &status, WUNTRACED | WNOHANG)) > 0) {
     int jid = PID2JID(jobs, pid);
+    
     if (verbose) {
       printf("sigchld_handler: Job [%d] (%d) deleted\n", jid, pid);
     }
 
-    // reap a zombie child
-    deletejob(jobs, pid);
+    // if terminated normally or by signals
+    if (WIFEXITED(status) || WIFSIGNALED(status)) {
+      sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+      deletejob(jobs, pid);
+      sigprocmask(SIG_SETMASK, &prev_all, NULL);
+    }
 
     if (verbose) {
       if (WIFEXITED(status)) {
@@ -82,18 +96,18 @@ void eval(char *cmdline) {
 
   // if not, synchronize add and delete jobs
   pid_t pid;
-  sigset_t mask_all, mask_one, prev;
+  sigset_t mask_all, mask_one, prev_one;
   sigfillset(&mask_all);
   sigemptyset(&mask_one);
   sigaddset(&mask_one, SIGCHLD);
 
   // to make sure sigchld_handler triggered after job is added
   // block SIGCHLD for parent process and child process
-  sigprocmask(SIG_BLOCK, &mask_one, &prev);
+  sigprocmask(SIG_BLOCK, &mask_one, &prev_one);
 
   /* child process */
   if ((pid = fork()) == 0) {
-    sigprocmask(SIG_SETMASK, &prev, NULL);
+    sigprocmask(SIG_SETMASK, &prev_one, NULL);
     if (execve(argv[0], argv, environ) < 0) {
       fprintf(stderr, "%s: Command not found\n", argv[0]);
       exit(0);
@@ -106,7 +120,7 @@ void eval(char *cmdline) {
   sigprocmask(SIG_BLOCK, &mask_all, NULL);
   addjob(jobs, pid, p_state, argv[0]);
   // restore original mask state
-  sigprocmask(SIG_SETMASK, &prev, NULL);
+  sigprocmask(SIG_SETMASK, &prev_one, NULL);
 
   if (!is_bg) {
     // not a backgroup request
@@ -115,21 +129,20 @@ void eval(char *cmdline) {
 }
 
 void waitfg(pid_t pid) {
-  sigset_t mask_chld, prev;
+  sigset_t mask_chld, prev_chld;
   sigemptyset(&mask_chld);
   sigaddset(&mask_chld, SIGCHLD);
 
-  sigprocmask(SIG_BLOCK, &mask_chld, &prev);
+  sigprocmask(SIG_BLOCK, &mask_chld, &prev_chld);
   while (fgPID(jobs)) {
-    sigsuspend(&prev);
+    sigsuspend(&prev_chld);
   }
+  // restore mask
+  sigprocmask(SIG_SETMASK, &prev_chld, NULL);
 
   if (verbose) {
     printf("waitfg: Process (%d) no longer the foreground process\n", pid);
   }
-
-  // restore mask
-  sigprocmask(SIG_SETMASK, &prev, NULL);
 }
 
 // return 1 and execute builtin command immediately, and 0 otherwise
