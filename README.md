@@ -155,3 +155,17 @@ while ((pid = waitpid(-1, &status, WUNTRACED | WNOHANG)) > 0) {
 }
 ```
 
+### Continue with Builtin Commands
+
+Mini shell provides two builtin commands to continue the execution of some jobs.
+
+```bash
+# pid is denoted by a number, '5'
+# jid is denoted by the prefix '%' with a number, '%5'
+
+# continue as a foreground job
+fg <pid|jid>
+# conitnue as a background job
+bg <pid|jid>
+```
+

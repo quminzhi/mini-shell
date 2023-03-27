@@ -48,10 +48,6 @@ void sigchld_handler(int sig) {
   while ((pid = waitpid(-1, &status, WUNTRACED | WNOHANG)) > 0) {
     int jid = PID2JID(jobs, pid);
 
-    if (verbose) {
-      printf("sigchld_handler: Job [%d] (%d) deleted\n", jid, pid);
-    }
-
     // case 1 WUNTRACED: stop process that received SIGTSTP or SIGSTOP
     // NOTE: different from what we do in sigtstp_handler, we handle signals
     // from other sources instead of shell-delivered signals, which is handled
@@ -82,6 +78,9 @@ void sigchld_handler(int sig) {
       sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
       // deletejob may be called twice when received SIGINT from user
       deletejob(jobs, pid);
+      if (verbose) {
+        printf("sigchld_handler: Job [%d] (%d) deleted\n", jid, pid);
+      }
       sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
 
@@ -169,6 +168,8 @@ void eval(char *cmdline) {
 
   /* child process */
   if ((pid = fork()) == 0) {
+    // give the child process a new gid to handle SIGINT correctly
+    setpgid(0, 0);
     sigprocmask(SIG_SETMASK, &prev_one, NULL);
     if (execve(argv[0], argv, environ) < 0) {
       fprintf(stderr, "%s: Command not found\n", argv[0]);
@@ -178,9 +179,11 @@ void eval(char *cmdline) {
 
   /* shell process */
   int p_state = is_bg ? BG : FG;
+  // replace '\n' with '\0'
+  cmdline[strlen(cmdline) - 1] = '\0';
   // prevent any signal from interrupting the addjob routine
   sigprocmask(SIG_BLOCK, &mask_all, NULL);
-  addjob(jobs, pid, p_state, argv[0]);
+  addjob(jobs, pid, p_state, cmdline);
   // restore original mask state
   sigprocmask(SIG_SETMASK, &prev_one, NULL);
 
@@ -228,7 +231,75 @@ int builtin_cmd(char *argv[]) {
   return 0;
 }
 
-void do_bgfg(char *argv[]) {}
+// TODO: continue the process as a foreground job or a background job
+void do_bgfg(char *argv[]) {
+  char *cmd = (char *)malloc(strlen(argv[0]) + 1);
+  strcpy(cmd, argv[0]);
+
+  if (argc != 2) {
+    fprintf(stderr, "do_bgfg: expected 1 argument, but got %d\n", argc);
+    free(cmd);
+    return;
+  }
+
+  if (strcmp(cmd, "fg") != 0 && strcmp(cmd, "bg") != 0) {
+    fprintf(stderr, "do_bgfg: invalid command \'%s\'\n", cmd);
+    return;
+  }
+
+  struct job_t *job;
+  int num = 0;
+  char *endptr = NULL;
+  char *p = argv[1];
+  if (*p == '%') {
+    // handle jid
+    p++;
+    num = strtol(p, &endptr, 10);
+    if (p == endptr) {
+      printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+      return;
+    }
+    job = getjobJID(jobs, num);
+    if (!job) {
+      printf("%%%d: No such job\n", num);
+      return;
+    }
+  } else {
+    // handle pid
+    num = strtol(p, &endptr, 10);
+    if (p == endptr) {
+      printf("%s: argument must be a PID or %%jobid\n", argv[0]);
+      return;
+    }
+    job = getjobPID(jobs, num);
+    if (!job) {
+      printf("(%d): No such process\n", num);
+      return;
+    }
+  }
+
+  // change process state and update job list
+  if (strcmp(cmd, "bg") == 0) {
+    // change ST/BG to BG
+    if (job->state == ST) {
+      kill(-(job->pid), SIGCONT);
+      printf("[%d] (%d) %s\n", job->jid, job->pid, job->cmdline);
+      job->state = BG;
+    }
+  } else {
+    // change ST/BG to FG
+    if (job->state == ST) {
+      kill(-(job->pid), SIGCONT);
+      job->state = FG;
+    }
+    if (job->state == BG) {
+      job->state = FG;
+    }
+    waitfg(job->pid);
+  }
+
+  free(cmd);
+}
 
 /* Helper Functions */
 
