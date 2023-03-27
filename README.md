@@ -169,3 +169,11 @@ fg <pid|jid>
 bg <pid|jid>
 ```
 
+## Contribution
+
+Contributions are welcomed and please send it to email of project maintainer,
+matt0xcc@gmail.com
+
+Contact: quminzhi@gmail.com
+
+Copyright (c) 2023 Minzhi. All Rights Reserved.
