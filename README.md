@@ -115,3 +115,43 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 ```
+
+### Signal Handlers
+
+- Sigchld
+
+To support foreground and background jobs, the shell process should be able to
+wait or not wait some child processes. For foreground job, shell process wait
+the termination of foreground child processes and reap them when they terminated
+(when the state changed to be ZOMBIE). For background job, shell process has no
+bother waiting for the termination of the child process and is free to do its
+own things. It reaps zombie processes when the background process finished and
+send SIGCHLD signals.
+
+Child processes are reaped by `sigchld_handler` for foreground and background
+processes. The only difference is the shell process will be SUSPENDED until
+there is no foreground job.
+
+```c
+// sigmast and sigsuspend
+sigprocmask(SIG_BLOCK, &mask_chld, &prev_chld);
+// suspend until no foreground job
+while (fgPID(jobs) != 0) {
+  sigsuspend(&prev_chld);
+}
+sigprocmask(SIG_SETMASK, &prev_chld, NULL);
+```
+
+```c
+// sigchld_handler
+while ((pid = waitpid(-1, &status, WUNTRACED | WNOHANG)) > 0) {
+  // WNOHANG: waitpid will return when there is no zombie process
+  // WUNTRACED: waitpid will return when a child process is stopped
+  if (WIFEXITED(staeus) || WIFSIGNALED(status)) {
+    sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+    deletejob(jobs, pid);
+    sigprocmask(SIG_SETMASK, &prev_all, NULL);
+  }
+}
+```
+

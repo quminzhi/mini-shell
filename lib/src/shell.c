@@ -26,7 +26,7 @@ void sigquit_handler(int sig) {
   exit(1);
 }
 
-// synchronize with addjob by blocking signal masks
+// child processes may be terminated or stopped (WUNTRACED)
 void sigchld_handler(int sig) {
   if (verbose) {
     printf("sigchld_handler: entering\n");
@@ -38,7 +38,8 @@ void sigchld_handler(int sig) {
   sigset_t mask_all, prev_all;
 
   sigfillset(&mask_all);
-  
+
+  // NOTE:
   // WUNTRACED: return when a child process is stopped, like a foreground
   // process is stopped by SIGTSTP (ctrl-z)
   // WNOHANG: return when no zombie (terminated) process exist, allowing shell
@@ -46,14 +47,40 @@ void sigchld_handler(int sig) {
   // processes.
   while ((pid = waitpid(-1, &status, WUNTRACED | WNOHANG)) > 0) {
     int jid = PID2JID(jobs, pid);
-    
+
     if (verbose) {
       printf("sigchld_handler: Job [%d] (%d) deleted\n", jid, pid);
     }
 
-    // if terminated normally or by signals
+    // case 1 WUNTRACED: stop process that received SIGTSTP or SIGSTOP
+    // NOTE: different from what we do in sigtstp_handler, we handle signals
+    // from other sources instead of shell-delivered signals, which is handled
+    // in sigtstp_handler
+    if (WIFSTOPPED(status) &&
+        (WSTOPSIG(status) == SIGTSTP || WSTOPSIG(status) == SIGSTOP)) {
+      struct job_t *stpjob = getjobPID(jobs, pid);
+      if (stpjob && stpjob->state != ST) {
+        // has not been catched
+        printf("sigchld_handler: Job [%d] (%d) stopped by signal %d\n",
+               PID2JID(jobs, pid), pid, WSTOPSIG(status));
+        stpjob->state = ST;
+      }
+    }
+
+    // case 2: reap termination processes
+    if (WIFSIGNALED(status) && WTERMSIG(status) == SIGINT) {
+      struct job_t *intjob = getjobPID(jobs, pid);
+      if (intjob)
+        // a child process is terminated by a SIGINT not from shell
+        // intjob == NULL when it is handled in sigint_handler
+        printf("sigchld_handler: Job [%d] (%d) terminated by signal %d\n",
+               PID2JID(jobs, pid), pid, WTERMSIG(status));
+    }
+
+    // terminated voluntarily or forcibaly
     if (WIFEXITED(status) || WIFSIGNALED(status)) {
       sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+      // deletejob may be called twice when received SIGINT from user
       deletejob(jobs, pid);
       sigprocmask(SIG_SETMASK, &prev_all, NULL);
     }
@@ -62,9 +89,6 @@ void sigchld_handler(int sig) {
       if (WIFEXITED(status)) {
         printf("sigchld_handler: Job [%d] (%d) terminates OK (status %d)\n",
                jid, pid, WEXITSTATUS(status));
-      } else {
-        printf("sigchld_handler: Job [%d] (%d) terminates abnormally\n", jid,
-               pid);
       }
     }
   }
@@ -74,8 +98,46 @@ void sigchld_handler(int sig) {
     printf("sigchld_handler: exiting\n");
   }
 }
-void sigtstp_handler(int sig) {}
-void sigint_handler(int sig) {}
+
+// The kernel sends a SIGTSTP to the shell whenever the use type ctrl-z at the
+// keyboard. Catch it and suspend foreground job by sending it a SIGTSTP.
+void sigtstp_handler(int sig) {
+  int olderrno = errno;
+  sigset_t mask_all, prev_all;
+  sigfillset(&mask_all);
+
+  sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+  pid_t pid = fgPID(jobs);
+  // send SIGTSTP to foreground job's process grounp
+  kill(-pid, SIGTSTP);
+  printf("sigtstp_handler: Job [%d] (%d) stopped by signal %d\n",
+         PID2JID(jobs, pid), pid, sig);
+  struct job_t *stpjob = getjobPID(jobs, pid);
+  stpjob->state = ST;
+  sigprocmask(SIG_SETMASK, &prev_all, NULL);
+
+  errno = olderrno;
+}
+
+// deliver SIGINT handler from user to the foreground job through shell process.
+void sigint_handler(int sig) {
+  int olderrno = errno;
+  sigset_t mask_all, prev_all;
+  sigfillset(&mask_all);
+
+  sigprocmask(SIG_BLOCK, &mask_all, &prev_all);
+  pid_t pid;
+  pid = fgPID(jobs);
+  if (pid == 0)
+    return;
+  kill(-pid, SIGINT);
+  printf("sigint_handler: Job [%d] (%d) terminated by signal %d\n",
+         PID2JID(jobs, pid), pid, sig);
+  deletejob(jobs, pid);
+  sigprocmask(SIG_SETMASK, &prev_all, NULL);
+
+  errno = olderrno;
+}
 
 void eval(char *cmdline) {
   // initialize argv
@@ -129,12 +191,15 @@ void eval(char *cmdline) {
 }
 
 void waitfg(pid_t pid) {
+  // prevent SIGCHLD from being received at <=
+  // in that case, SIGCHLD won't be catched and it causes infinite loop
   sigset_t mask_chld, prev_chld;
   sigemptyset(&mask_chld);
   sigaddset(&mask_chld, SIGCHLD);
 
   sigprocmask(SIG_BLOCK, &mask_chld, &prev_chld);
   while (fgPID(jobs)) {
+    // <=
     sigsuspend(&prev_chld);
   }
   // restore mask
